@@ -1,0 +1,48 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.d
+*.map
+*.crf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.axf
+*.hex
+
+*.dep
+*.bak
+*.lst
+*.lnp
+*.uvoptx
+*.uvopt
+*.htm
+*.uvgui*
+JLinkLog.txt
+
+**/objects/
+**/boost/
+
+
