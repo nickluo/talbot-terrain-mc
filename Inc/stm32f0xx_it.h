@@ -48,6 +48,7 @@
 void NMI_Handler(void);
 void SysTick_Handler(void);
 void DMA1_Channel4_5_IRQHandler(void);
+void TIM14_IRQHandler(void);
 void USART2_IRQHandler(void);
 
 #ifdef __cplusplus

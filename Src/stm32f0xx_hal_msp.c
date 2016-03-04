@@ -118,7 +118,21 @@ void HAL_TIM_Encoder_MspInit(TIM_HandleTypeDef* htim_encoder)
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
 {
 
-  if(htim_base->Instance==TIM15)
+  if(htim_base->Instance==TIM14)
+  {
+  /* USER CODE BEGIN TIM14_MspInit 0 */
+
+  /* USER CODE END TIM14_MspInit 0 */
+    /* Peripheral clock enable */
+    __TIM14_CLK_ENABLE();
+  /* Peripheral interrupt init*/
+    HAL_NVIC_SetPriority(TIM14_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(TIM14_IRQn);
+  /* USER CODE BEGIN TIM14_MspInit 1 */
+
+  /* USER CODE END TIM14_MspInit 1 */
+  }
+  else if(htim_base->Instance==TIM15)
   {
   /* USER CODE BEGIN TIM15_MspInit 0 */
 
@@ -205,17 +219,32 @@ void HAL_TIM_Encoder_MspDeInit(TIM_HandleTypeDef* htim_encoder)
 void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base)
 {
 
-  if(htim_base->Instance==TIM15)
+  if(htim_base->Instance==TIM14)
+  {
+  /* USER CODE BEGIN TIM14_MspDeInit 0 */
+
+  /* USER CODE END TIM14_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __TIM14_CLK_DISABLE();
+
+    /* Peripheral interrupt DeInit*/
+    HAL_NVIC_DisableIRQ(TIM14_IRQn);
+
+  /* USER CODE BEGIN TIM14_MspDeInit 1 */
+
+  /* USER CODE END TIM14_MspDeInit 1 */
+  }
+  else if(htim_base->Instance==TIM15)
   {
   /* USER CODE BEGIN TIM15_MspDeInit 0 */
 
   /* USER CODE END TIM15_MspDeInit 0 */
     /* Peripheral clock disable */
     __TIM15_CLK_DISABLE();
-  }
   /* USER CODE BEGIN TIM15_MspDeInit 1 */
 
   /* USER CODE END TIM15_MspDeInit 1 */
+  }
 
 }
 
@@ -251,7 +280,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     hdma_usart2_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     hdma_usart2_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_usart2_rx.Init.Mode = DMA_NORMAL;
-    hdma_usart2_rx.Init.Priority = DMA_PRIORITY_LOW;
+    hdma_usart2_rx.Init.Priority = DMA_PRIORITY_HIGH;
     HAL_DMA_Init(&hdma_usart2_rx);
 
     __HAL_LINKDMA(huart,hdmarx,hdma_usart2_rx);
@@ -263,7 +292,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     hdma_usart2_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     hdma_usart2_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_usart2_tx.Init.Mode = DMA_NORMAL;
-    hdma_usart2_tx.Init.Priority = DMA_PRIORITY_LOW;
+    hdma_usart2_tx.Init.Priority = DMA_PRIORITY_HIGH;
     HAL_DMA_Init(&hdma_usart2_tx);
 
     __HAL_LINKDMA(huart,hdmatx,hdma_usart2_tx);

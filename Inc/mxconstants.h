@@ -38,6 +38,8 @@
 
 /* Private define ------------------------------------------------------------*/
 
+#define STATUS_Pin GPIO_PIN_5
+#define STATUS_GPIO_Port GPIOA
 #define DIR1_Pin GPIO_PIN_6
 #define DIR1_GPIO_Port GPIOC
 #define DIR2_Pin GPIO_PIN_7

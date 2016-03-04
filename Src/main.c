@@ -44,6 +44,7 @@
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim14;
 TIM_HandleTypeDef htim15;
 
 UART_HandleTypeDef huart2;
@@ -52,14 +53,22 @@ DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-uint8_t rx_buffer[0x100];
+#define RX_BUFFER_SIZE 0x100
+volatile uint8_t rx_buffer[RX_BUFFER_SIZE];
 int rx_index = 0;
 
-uint32_t StepCounts[2] = { 0, 0 };
-int Steps[2] = { 0, 0 };
-int8_t Dirs[2] = { 1, 1 };
+struct MotorState
+{
+	uint8_t Move;
+	int 		Steps;
+	int8_t 	Dir;
+	float 	CurrentSpeed;
+	float 	WheelDistance;
+};
 
-float WheelDists[2] = { 0, 0 };
+struct MotorState	Motors[2];
+
+//float WheelDists[2] = { 0, 0 };
 
 const int8_t WheelSigns[2] = { 1, -1 };
 
@@ -75,6 +84,7 @@ static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM15_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM14_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
                 
@@ -100,9 +110,6 @@ int stdin_getchar (void)
 
 int GetDeltaCount(uint8_t ch, uint32_t *lastCount)
 {
-	//static uint32_t LastCount[2] = { 0 ,0 };
-	if (ch>=2)
-		return 0;
 	uint32_t current = ch==0 ? htim1.Instance->CNT : htim3.Instance->CNT;
 	int delta = current-*lastCount;
 	if (delta>0x8000)
@@ -113,61 +120,82 @@ int GetDeltaCount(uint8_t ch, uint32_t *lastCount)
 	return delta;
 }
 
-void PWMDutyChanged(int channel, float duty)
+#define BRAKE_DUTY								100
+#define	DUTY_RESOLUTION						1000
+#define	DUTY_ACTUAL_RESOLUTION		900
+
+int BrakeActuator(int channel, int dir)
 {
 	if (channel==0)
 	{
 		HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_1);
+		HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, dir<0 ? GPIO_PIN_SET:GPIO_PIN_RESET);
+		htim15.Instance->CCR1 = BRAKE_DUTY;
+		HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_1);
+	}
+	else if (channel==1)
+	{
+		HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_2);
+		HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, dir<0 ? GPIO_PIN_SET:GPIO_PIN_RESET);
+		htim15.Instance->CCR2 = BRAKE_DUTY;
+		HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);
+	}
+	return 1;
+}
+
+void PWMDutyChanged(int channel, float duty)
+{
+	uint32_t ccr = (fabs(duty)<EPSILON_F) ? 0 : (uint32_t)(fabs(duty)*DUTY_ACTUAL_RESOLUTION)+BRAKE_DUTY;
+	if (channel==0)
+	{
+		HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_1);
 		HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, duty>0 ? GPIO_PIN_SET:GPIO_PIN_RESET);
-		htim15.Instance->CCR1 = (uint32_t)(fabs(duty) * 0xffff);
+		htim15.Instance->CCR1 = ccr;
 		HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_1);
 	}
 	else if (channel==1)
 	{
 		HAL_TIM_PWM_Stop(&htim15, TIM_CHANNEL_2);
 		HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, duty>0 ? GPIO_PIN_SET:GPIO_PIN_RESET);
-		htim15.Instance->CCR2 = (uint32_t)(fabs(duty) * 0xffff);
+		htim15.Instance->CCR2 = ccr;
 		HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);
 	}
 }
 
 #define REPORT_INTERVAL	50
 
+void OutputSpeed(int channel)
+{
+	printf("CH %d Speed: %d mm/s\r\n", channel, (int)(Motors[channel].CurrentSpeed+0.5f));
+	//fflush(stdout);
+}
+
+float GetCurrentSpeed(int channel)
+{
+	return Motors[channel].CurrentSpeed;
+}
+
 void Update()
 {
 	for(int i=0;i<2;++i)
 	{
-		int delta = GetDeltaCount(i, &StepCounts[i]);
-		WheelDists[i] += WheelSigns[i] * delta * DPP;
-		if (Dirs[i]>0)
+		if (Motors[i].Move)
 		{
-			if (Steps[i]>0)
+			if (TestModeEnable>1 && HAL_GetTick()%REPORT_INTERVAL==0)
+				OutputSpeed(i);
+			if (Motors[i].Dir>0)
 			{
-				if (TestModeEnable>1 && HAL_GetTick()%REPORT_INTERVAL==0)
-					OutputSpeed(i);
-				Steps[i] -= delta;
-				if (Steps[i]<=0)
-					PIDStop(i);
-				else
-					Steps[i] = Brake(i, Steps[i]);
+				if (Motors[i].Steps<=0)
+					Motors[i].Move = PIDStop(i, 1);
 			}
-		}
-		else
-		{
-			if (Steps[i]<0)
+			else
 			{
-				if (TestModeEnable>1 && HAL_GetTick()%REPORT_INTERVAL==0)
-					OutputSpeed(i);
-				Steps[i] -= delta;
-				if (Steps[i]>=0)
-					PIDStop(i);
-				else
-					Steps[i] = Brake(i, Steps[i]);
+				if (Motors[i].Steps>=0)
+					Motors[i].Move = PIDStop(i, 1);
 			}
 		}
 	}
 }
-
 
 void HAL_SYSTICK_Callback(void)
 {
@@ -176,17 +204,19 @@ void HAL_SYSTICK_Callback(void)
 	PIDTick(HAL_GetTick());
 }
 
-void Calculate(const struct MotorConfig *config)
+void Move(const struct MotorConfig *config)
 {
 	static int8_t boot = 1;
 	int max = abs(config->LW) < abs(config->RW) ? abs(config->RW) : abs(config->LW);
 	
 	if (max==0)
 	{
-		Steps[0] = 0;
-		PIDStop(0);
-		Steps[1] = 0;
-		PIDStop(1);
+		Motors[0].Steps = 0;
+		Motors[0].Move = 1;
+		Motors[1].Steps = 0;
+		Motors[1].Move = 1;
+		PIDStop(0, 1);
+		PIDStop(1, 1);
 		return;
 	}
 	
@@ -195,28 +225,30 @@ void Calculate(const struct MotorConfig *config)
 	float vl = config->Speed * lw / max;
 	float vr = config->Speed * rw / max;
 	
-	Dirs[0] = vl>0 ? 1 : -1;
-	Dirs[1] = vr>0 ? 1 : -1;
+	Motors[0].Dir = vl>0 ? 1 : -1;
+	Motors[1].Dir = vr>0 ? 1 : -1;
+	Motors[0].Move = 1;
+	Motors[1].Move = 1;
 	
-	if (abs(vl)<0.000001f)
+	if (fabs(vl)<EPSILON_F)
 	{
-		Steps[0] = 0;
-		PIDStop(0);
+		Motors[0].Steps = 0;
+		PIDStop(0, 1);
 	}
 	else
 	{
-		Steps[0] = (int)(lw / DPP);
+		Motors[0].Steps = (int)(lw / DPP);
 		PIDStart(0, vl, boot);
 	}
 	
 	if (abs(vr)<0.000001f)
 	{
-		Steps[1] = 0;
-		PIDStop(1);
+		Motors[1].Steps = 0;
+		PIDStop(0, 1);
 	}
 	else
 	{
-		Steps[1] = (int)(rw / DPP);
+		Motors[1].Steps = (int)(rw / DPP);
 		PIDStart(1, vr, boot);
 	}
 	boot = 0;
@@ -227,8 +259,8 @@ void SetTestMode(uint8_t on)
 	TestModeEnable = on;
 	if (on)
 	{
-		WheelDists[0] = 0;
-		WheelDists[1] = 0;
+		Motors[0].WheelDistance = 0;
+		Motors[1].WheelDistance = 0;
 	}
 }
 
@@ -240,7 +272,7 @@ void CommandProcess(enum CommandEnum command, const void *params)
 		case SetMotorCommand:
 			if (TestModeEnable)
 			{
-				Calculate((const struct MotorConfig *)params);
+				Move((const struct MotorConfig *)params);
 				printf("\x1A");
 			}
 			else
@@ -250,7 +282,7 @@ void CommandProcess(enum CommandEnum command, const void *params)
 		case GetMotorCommand:
 			if (TestModeEnable)
 				printf("LeftWheel_PositionInMM,%d RightWheel_PositionInMM,%d\x1A", 
-					(int)WheelDists[0], (int)WheelDists[1]);
+					(int)Motors[0].WheelDistance, (int)Motors[1].WheelDistance);
 			else
 				printf("TestMode Off\x1A");
 			fflush(stdout);
@@ -270,13 +302,43 @@ void CommandProcess(enum CommandEnum command, const void *params)
 //	sprintf(data, "Command Accepted\x1A");
 //	HAL_UART_Transmit_DMA(&huart1, (uint8_t *)&data, strlen(data));
 }
+
+//Timer for speed with 10us period
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	static uint32_t stepCounts[2];
+	static uint32_t dt[2] = { 0, 0 };
+	static uint8_t boot = 1;
+	if (htim != &htim14)
+		return;
+	if (boot)
+	{
+		stepCounts[0] = htim1.Instance->CNT;
+		stepCounts[1] = htim3.Instance->CNT;
+		boot = 0;
+		return;
+	}
+	for(int i=0;i<2;++i)
+	{
+		int delta = GetDeltaCount(i, &stepCounts[i]);
+		dt[i]+=10;
+		if (delta==0 && dt[i]<100000)
+			continue;
+		if (Motors[i].Move)
+			Motors[i].Steps -= delta;
+		float dd = delta * DPP;
+		Motors[i].WheelDistance += WheelSigns[i] * dd;
+		Motors[i].CurrentSpeed = dd*1000000/dt[i];
+		dt[i] = 0;
+	}
+}
 /* USER CODE END 0 */
 
 int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	
+	memset(Motors, 0, sizeof(struct MotorState)*2);
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -294,6 +356,7 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM15_Init();
   MX_USART2_UART_Init();
+  MX_TIM14_Init();
 
   /* USER CODE BEGIN 2 */
 	SystemCoreClockUpdate();
@@ -304,18 +367,23 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);
 	
-	memset(rx_buffer, 0, 0x100);
-	HAL_UART_Receive_DMA(&huart2, rx_buffer, 0x100);
+	HAL_TIM_Base_Start_IT(&htim14);
 	
-	GetDeltaCount(0, &StepCounts[0]);
-	GetDeltaCount(0, &StepCounts[1]);
+	//memset((void *)rx_buffer, 0, RX_BUFFER_SIZE);
+	//HAL_UART_Receive_DMA(&huart2, (uint8_t *)rx_buffer, RX_BUFFER_SIZE);
+	//HAL_UART_Receive_IT(&huart2, rx_buffer, 0x100);
+	
+//	GetDeltaCount(0, &StepCounts[0]);
+//	GetDeltaCount(0, &StepCounts[1]);
 	//PIDStart(0, 600, 1);
+//	PWMDutyChanged(1,0.1f);
+//	PWMDutyChanged(0,0.2f);
 	
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	uint8_t renew = 0;
+	uint8_t renew = 1;
 	int offset = 0;
   while (1)
   {
@@ -325,25 +393,28 @@ int main(void)
 
 		Update();
 		
-		if (rx_index>=0x100 || rx_buffer[rx_index] == 0)
+		if (rx_index>=RX_BUFFER_SIZE || rx_buffer[rx_index] == 0)
 		{
 			if (renew && huart2.State!=HAL_UART_STATE_BUSY_TX && huart2.State!=HAL_UART_STATE_BUSY_TX_RX)
 			{
 				rx_index=0;
 				offset = 0;
 				HAL_UART_DMAStop(&huart2);
-				memset(rx_buffer, 0, 0x100);
-				HAL_UART_Receive_DMA(&huart2, rx_buffer, 0x100);
+				memset((void *)rx_buffer, 0, RX_BUFFER_SIZE);
+				HAL_UART_Receive_DMA(&huart2, (uint8_t *)rx_buffer, RX_BUFFER_SIZE);
 				renew = 0;
 			}
 			continue;
 		}
-		if (rx_buffer[rx_index] == '\n' || rx_index >= 0xff)
+		
+		//HAL_Delay(1);
+		
+		if (rx_buffer[rx_index] == '\n' || rx_index >= RX_BUFFER_SIZE-1)
 		{
 			int len = rx_index - offset;
 			if (rx_index>0 && rx_buffer[rx_index-1] == '\r')
 				--len;
-			CommandParse(rx_buffer+offset, len, &CommandProcess);
+			CommandParse((uint8_t *)rx_buffer+offset, len, &CommandProcess);
 			offset = rx_index+1;
 			renew = 1;
 		}
@@ -445,6 +516,29 @@ void MX_TIM3_Init(void)
 
 }
 
+/* TIM14 init function */
+void MX_TIM14_Init(void)
+{
+
+  TIM_OC_InitTypeDef sConfigOC;
+
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 47;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 9;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  HAL_TIM_Base_Init(&htim14);
+
+  HAL_TIM_OC_Init(&htim14);
+
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  HAL_TIM_OC_ConfigChannel(&htim14, &sConfigOC, TIM_CHANNEL_1);
+
+}
+
 /* TIM15 init function */
 void MX_TIM15_Init(void)
 {
@@ -455,9 +549,9 @@ void MX_TIM15_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
 
   htim15.Instance = TIM15;
-  htim15.Init.Prescaler = 3;
+  htim15.Init.Prescaler = 47;
   htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim15.Init.Period = 65535;
+  htim15.Init.Period = 1000;
   htim15.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim15.Init.RepetitionCounter = 0;
   HAL_TIM_Base_Init(&htim15);
@@ -560,10 +654,10 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA0 PA1 PA4 PA5 
-                           PA10 PA11 PA12 PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4
-                          |GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_15;
+  /*Configure GPIO pins : PA0 PA1 PA4 PA10 
+                           PA11 PA12 PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_10 
+                          |GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -573,6 +667,13 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : STATUS_Pin */
+  GPIO_InitStruct.Pin = STATUS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
+  HAL_GPIO_Init(STATUS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB0 PB1 PB2 PB10 
                            PB11 PB12 PB13 PB3 
@@ -589,7 +690,7 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pins : DIR1_Pin DIR2_Pin */
   GPIO_InitStruct.Pin = DIR1_Pin|DIR2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
@@ -600,16 +701,11 @@ void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(STATUS_GPIO_Port, STATUS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, DIR1_Pin|DIR2_Pin, GPIO_PIN_RESET);
-	
-	/*Configure GPIO pins: PA5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
 }
 
 /* USER CODE BEGIN 4 */

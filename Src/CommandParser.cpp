@@ -96,7 +96,10 @@ void Parse(const std::string &s)
 int CommandParse(uint8_t *data, int size, CommandHandler handler)
 {
 	if (size==0)
+	{
+		handler(InvalidCommand, NULL);
 		return 1;
+	}
 	command_index = -1;
 	string str(reinterpret_cast<char *>(data), size);
   do

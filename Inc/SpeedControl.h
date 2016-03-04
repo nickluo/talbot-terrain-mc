@@ -5,34 +5,29 @@
 
 #define MAX_TORQUE 			1000.0f		// Nmm
 #define WHEEL_DIAMETER_IN_MM			133
-#define MIN_CONTROL_INTERVAL_IN_MS		1 
+#define MIN_CONTROL_INTERVAL_IN_MS	10 
 #define PPR		1326
 #define PI	3.1415927f
-#define MIN_PWM_DUTY		0.06f
 
 static const float DPP = (WHEEL_DIAMETER_IN_MM*PI/PPR);
 
-#define P_GAIN	0.00008f
-#define D_GAIN	0.00002f
-#define I_GAIN	0.00000002f
-
-#define BRAKE_COEFF 1.f
+#define P_GAIN	0.0015f
+#define I_GAIN	0.00003f
+#define D_GAIN	0.006f
 
 #define EPSILON_F 0.000001f
 
 #ifdef __cplusplus
  extern "C" {
 #endif
-
-void OutputSpeed(int channel);
-int Brake(int channel, int steps);
 	 
 void PIDStart(int channel, float expected, uint8_t reset);
-void PIDStop(int channel);
+int PIDStop(int channel, uint8_t brake);
 void PIDTick(uint32_t tick);
 	
-__weak int GetDeltaCount(uint8_t ch, uint32_t *lastCount);
+__weak float GetCurrentSpeed(int channel);
 __weak void PWMDutyChanged(int channel, float duty);
+__weak int BrakeActuator(int channel, int dir);
 	 
 #ifdef __cplusplus
  }
