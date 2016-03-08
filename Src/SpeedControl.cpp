@@ -9,7 +9,6 @@ struct PIDState
 	uint8_t Controlled;	//0- Idle, 1-Controlled, 2-Brake 0xff-Started
 	float ExpectedSpeed;
 	float LastSpeed;
-	//float CurrentSpeed;
 	float DState;
 	float IState;
 	float PWMDuty;
@@ -22,7 +21,6 @@ struct PIDState
 };
 
 static PIDState PIDStates[2];
-//static uint32_t LastCount[2] = { 0, 0 };
 
 void PIDControl(int channel);
 
@@ -117,11 +115,6 @@ void PIDControl(int channel, float currentSpeed)
 	PWMDutyChanged(channel, PIDStates[channel].PWMDuty);
 	PIDStates[channel].IState += PIDStates[channel].Bi*error + PIDStates[channel].Br*(PIDStates[channel].PWMDuty-v);
 	PIDStates[channel].LastSpeed = currentSpeed;
-}
-
-__weak int GetDeltaCount(uint8_t ch, uint32_t *lastCount)
-{
-	return 0;
 }
 
 __weak float GetCurrentSpeed(int channel)

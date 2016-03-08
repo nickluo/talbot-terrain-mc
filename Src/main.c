@@ -53,9 +53,12 @@ DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-#define RX_BUFFER_SIZE 0x100
+#define BRAKE_ON			 0
+#define RX_BUFFER_SIZE 0x200
 volatile uint8_t rx_buffer[RX_BUFFER_SIZE];
 int rx_index = 0;
+
+static char Str[0x100];
 
 struct MotorState
 {
@@ -67,9 +70,6 @@ struct MotorState
 };
 
 struct MotorState	Motors[2];
-
-//float WheelDists[2] = { 0, 0 };
-
 const int8_t WheelSigns[2] = { 1, -1 };
 
 uint8_t TestModeEnable = 0;
@@ -167,7 +167,6 @@ void PWMDutyChanged(int channel, float duty)
 void OutputSpeed(int channel)
 {
 	printf("CH %d Speed: %d mm/s\r\n", channel, (int)(Motors[channel].CurrentSpeed+0.5f));
-	//fflush(stdout);
 }
 
 float GetCurrentSpeed(int channel)
@@ -186,12 +185,12 @@ void Update()
 			if (Motors[i].Dir>0)
 			{
 				if (Motors[i].Steps<=0)
-					Motors[i].Move = PIDStop(i, 1);
+					Motors[i].Move = PIDStop(i, BRAKE_ON);
 			}
 			else
 			{
 				if (Motors[i].Steps>=0)
-					Motors[i].Move = PIDStop(i, 1);
+					Motors[i].Move = PIDStop(i, BRAKE_ON);
 			}
 		}
 	}
@@ -215,8 +214,8 @@ void Move(const struct MotorConfig *config)
 		Motors[0].Move = 1;
 		Motors[1].Steps = 0;
 		Motors[1].Move = 1;
-		PIDStop(0, 1);
-		PIDStop(1, 1);
+		PIDStop(0, BRAKE_ON);
+		PIDStop(1, BRAKE_ON);
 		return;
 	}
 	
@@ -233,7 +232,7 @@ void Move(const struct MotorConfig *config)
 	if (fabs(vl)<EPSILON_F)
 	{
 		Motors[0].Steps = 0;
-		PIDStop(0, 1);
+		PIDStop(0, BRAKE_ON);
 	}
 	else
 	{
@@ -244,7 +243,7 @@ void Move(const struct MotorConfig *config)
 	if (abs(vr)<0.000001f)
 	{
 		Motors[1].Steps = 0;
-		PIDStop(0, 1);
+		PIDStop(0, BRAKE_ON);
 	}
 	else
 	{
@@ -266,7 +265,6 @@ void SetTestMode(uint8_t on)
 
 void CommandProcess(enum CommandEnum command, const void *params)
 {
-	//const struct MotorConfig *config;
 	switch (command)
 	{
 		case SetMotorCommand:
@@ -281,11 +279,19 @@ void CommandProcess(enum CommandEnum command, const void *params)
 			break;
 		case GetMotorCommand:
 			if (TestModeEnable)
-				printf("LeftWheel_PositionInMM,%d RightWheel_PositionInMM,%d\x1A", 
-					(int)Motors[0].WheelDistance, (int)Motors[1].WheelDistance);
+			{
+				sprintf(Str,"LeftWheel_PositionInMM,%d\nLeftWheel_Speed,%d\nRightWheel_PositionInMM,%d\nRightWheel_Speed,%d\n\x1A", 
+					(int)Motors[0].WheelDistance, (int)Motors[0].CurrentSpeed,
+					(int)Motors[1].WheelDistance, (int)Motors[1].CurrentSpeed);
+				uint16_t size = strlen(Str);
+				while (HAL_UART_Transmit_DMA(&huart2, (uint8_t *)Str, size)==HAL_BUSY)
+					__nop();
+			}
 			else
+			{
 				printf("TestMode Off\x1A");
-			fflush(stdout);
+				fflush(stdout);
+			}
 			break;
 		case TestModeCommand:
 			SetTestMode(*(uint8_t *)params);
@@ -297,10 +303,6 @@ void CommandProcess(enum CommandEnum command, const void *params)
 			fflush(stdout);
 			break;
 	}
-	
-//	static char data[0x100];
-//	sprintf(data, "Command Accepted\x1A");
-//	HAL_UART_Transmit_DMA(&huart1, (uint8_t *)&data, strlen(data));
 }
 
 //Timer for speed with 10us period
@@ -361,6 +363,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	SystemCoreClockUpdate();
 	
+	HAL_Delay(500);
+	
 	HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
 	HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
 
@@ -368,6 +372,11 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);
 	
 	HAL_TIM_Base_Start_IT(&htim14);
+	
+	sprintf(Str, "System Started...\r\n\x1A");
+	uint16_t size = strlen(Str);
+	while (HAL_UART_Transmit_DMA(&huart2, (uint8_t *)Str, size)==HAL_BUSY)
+		__nop();
 	
 	//memset((void *)rx_buffer, 0, RX_BUFFER_SIZE);
 	//HAL_UART_Receive_DMA(&huart2, (uint8_t *)rx_buffer, RX_BUFFER_SIZE);
@@ -406,8 +415,6 @@ int main(void)
 			}
 			continue;
 		}
-		
-		//HAL_Delay(1);
 		
 		if (rx_buffer[rx_index] == '\n' || rx_index >= RX_BUFFER_SIZE-1)
 		{
