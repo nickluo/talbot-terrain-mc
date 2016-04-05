@@ -44,6 +44,8 @@
 #define DIR1_GPIO_Port GPIOC
 #define DIR2_Pin GPIO_PIN_7
 #define DIR2_GPIO_Port GPIOC
+#define TRIGGER_Pin GPIO_PIN_9
+#define TRIGGER_GPIO_Port GPIOC
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

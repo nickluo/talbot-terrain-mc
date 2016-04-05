@@ -46,6 +46,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim14;
 TIM_HandleTypeDef htim15;
+TIM_HandleTypeDef htim16;
 
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_rx;
@@ -74,6 +75,8 @@ const int8_t WheelSigns[2] = { 1, -1 };
 
 uint8_t TestModeEnable = 0;
 
+volatile uint32_t ObstacleDistance = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -85,6 +88,7 @@ static void MX_TIM3_Init(void);
 static void MX_TIM15_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM14_Init(void);
+static void MX_TIM16_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
                 
@@ -198,9 +202,19 @@ void Update()
 
 void HAL_SYSTICK_Callback(void)
 {
-	if (HAL_GetTick()%500==0)
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+	uint32_t tick = HAL_GetTick();
+	if (tick%500==0)
+		HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
 	PIDTick(HAL_GetTick());
+	if (tick%100==0)
+	{
+		HAL_TIM_IC_Stop_IT(&htim16, TIM_CHANNEL_1);
+		HAL_GPIO_WritePin(TRIGGER_GPIO_Port, TRIGGER_Pin, GPIO_PIN_RESET);
+		htim16.Instance->CNT = 0;
+		HAL_TIM_IC_Start_IT(&htim16, TIM_CHANNEL_1);
+		HAL_GPIO_WritePin(TRIGGER_GPIO_Port, TRIGGER_Pin, GPIO_PIN_SET);
+		
+	}
 }
 
 void Move(const struct MotorConfig *config)
@@ -280,9 +294,9 @@ void CommandProcess(enum CommandEnum command, const void *params)
 		case GetMotorCommand:
 			if (TestModeEnable)
 			{
-				sprintf(Str,"LeftWheel_PositionInMM,%d\nLeftWheel_Speed,%d\nRightWheel_PositionInMM,%d\nRightWheel_Speed,%d\n\x1A", 
+				sprintf(Str,"LeftWheel_PositionInMM,%d\nLeftWheel_Speed,%d\nRightWheel_PositionInMM,%d\nRightWheel_Speed,%d\nObstacle_Distance,%d\n\x1A", 
 					(int)Motors[0].WheelDistance, (int)Motors[0].CurrentSpeed,
-					(int)Motors[1].WheelDistance, (int)Motors[1].CurrentSpeed);
+					(int)Motors[1].WheelDistance, (int)Motors[1].CurrentSpeed, ObstacleDistance);
 				uint16_t size = strlen(Str);
 				while (HAL_UART_Transmit_DMA(&huart2, (uint8_t *)Str, size)==HAL_BUSY)
 					__nop();
@@ -302,6 +316,33 @@ void CommandProcess(enum CommandEnum command, const void *params)
 			printf("Invalid Command\x1A");
 			fflush(stdout);
 			break;
+	}
+}
+
+//Ultrasonic Counter Update
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	static uint8_t us_count_start = 0;
+	static int us_count = 0;
+	
+	if (htim!=&htim16)
+		return;
+	
+	if (us_count_start)
+	{
+		us_count_start = 0;
+		us_count = htim16.Instance->CCR1 - us_count;
+		if (us_count>0 && us_count<600)
+			ObstacleDistance = us_count;
+		else
+			ObstacleDistance = 0;
+		HAL_TIM_IC_Stop_IT(&htim16, TIM_CHANNEL_1);
+		htim16.Instance->CNT = 0;
+	}
+	else
+	{
+		us_count_start = 1;
+		us_count = htim16.Instance->CCR1;
 	}
 }
 
@@ -333,6 +374,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		Motors[i].CurrentSpeed = dd*1000000/dt[i];
 		dt[i] = 0;
 	}
+	
+	//Ultrasonic sensor PWM counter
+	//UltrasonicCounterUpdate();
 }
 /* USER CODE END 0 */
 
@@ -359,6 +403,7 @@ int main(void)
   MX_TIM15_Init();
   MX_USART2_UART_Init();
   MX_TIM14_Init();
+  MX_TIM16_Init();
 
   /* USER CODE BEGIN 2 */
 	SystemCoreClockUpdate();
@@ -596,6 +641,30 @@ void MX_TIM15_Init(void)
 
 }
 
+/* TIM16 init function */
+void MX_TIM16_Init(void)
+{
+
+  TIM_IC_InitTypeDef sConfigIC;
+
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 2399;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 65535;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  HAL_TIM_Base_Init(&htim16);
+
+  HAL_TIM_IC_Init(&htim16);
+
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  HAL_TIM_IC_ConfigChannel(&htim16, &sConfigIC, TIM_CHANNEL_1);
+
+}
+
 /* USART2 init function */
 void MX_USART2_UART_Init(void)
 {
@@ -651,12 +720,12 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : PC13 PC14 PC15 PC0 
                            PC1 PC2 PC3 PC4 
-                           PC5 PC8 PC9 PC10 
-                           PC11 PC12 */
+                           PC5 PC8 PC10 PC11 
+                           PC12 */
   GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15|GPIO_PIN_0 
                           |GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4 
-                          |GPIO_PIN_5|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10 
-                          |GPIO_PIN_11|GPIO_PIN_12;
+                          |GPIO_PIN_5|GPIO_PIN_8|GPIO_PIN_10|GPIO_PIN_11 
+                          |GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
@@ -685,11 +754,11 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pins : PB0 PB1 PB2 PB10 
                            PB11 PB12 PB13 PB3 
                            PB4 PB5 PB6 PB7 
-                           PB8 PB9 */
+                           PB9 */
   GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_10 
                           |GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_3 
                           |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7 
-                          |GPIO_PIN_8|GPIO_PIN_9;
+                          |GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -700,6 +769,13 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : TRIGGER_Pin */
+  GPIO_InitStruct.Pin = TRIGGER_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
+  HAL_GPIO_Init(TRIGGER_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PD2 */
   GPIO_InitStruct.Pin = GPIO_PIN_2;
@@ -712,6 +788,9 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, DIR1_Pin|DIR2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(TRIGGER_GPIO_Port, TRIGGER_Pin, GPIO_PIN_SET);
 
 }
 

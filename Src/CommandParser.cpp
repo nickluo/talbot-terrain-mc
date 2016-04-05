@@ -10,7 +10,7 @@ static int command_index = -1;
 static MotorConfig mc;
 static uint8_t testMode = 0;
 
-const std::string Commands[] = {"setmotor", "getmotor", "testmode"};
+const std::string Commands[] = {"setmotor", "getmotor", "testmode", };
 
 const std::string Parameters[] = {"lwheeldist", "rwheeldist", "speed"};
 

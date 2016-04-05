@@ -15,7 +15,7 @@
         <TargetCommonOption>
           <Device>STM32F030R8</Device>
           <Vendor>STMicroelectronics</Vendor>
-          <PackID>Keil.STM32F0xx_DFP.1.4.0</PackID>
+          <PackID>Keil.STM32F0xx_DFP.1.5.0</PackID>
           <PackURL>http://www.keil.com/pack/</PackURL>
           <Cpu>IRAM(0x20000000-0x20001FFF) IROM(0x8000000-0x800FFFF) CLOCK(8000000) CPUTYPE("Cortex-M0")</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
@@ -310,7 +310,7 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>4</Optim>
+            <Optim>1</Optim>
             <oTime>1</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
@@ -332,7 +332,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F030x8</Define>
               <Undefine></Undefine>
-              <IncludePath>../Inc;            ../Drivers/STM32F0xx_HAL_Driver/Inc;            ../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy;            ../Drivers/CMSIS/Include;            ../Drivers/CMSIS/Device/ST/STM32F0xx/Include</IncludePath>
+              <IncludePath>../Inc;                 ../Drivers/STM32F0xx_HAL_Driver/Inc;                 ../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy;                 ../Drivers/CMSIS/Include;                 ../Drivers/CMSIS/Device/ST/STM32F0xx/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
