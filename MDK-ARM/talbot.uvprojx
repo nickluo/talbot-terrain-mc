@@ -10,7 +10,7 @@
       <TargetName>talbot</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>5060061::V5.06 update 1 (build 61)::ARMCC</pCCUsed>
+      <pCCUsed>5060183::V5.06 update 2 (build 183)::ARMCC</pCCUsed>
       <TargetOption>
         <TargetCommonOption>
           <Device>STM32F030R8</Device>
@@ -310,7 +310,7 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>1</Optim>
+            <Optim>3</Optim>
             <oTime>1</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
@@ -328,11 +328,13 @@
             <v6LangP>1</v6LangP>
             <vShortEn>1</vShortEn>
             <vShortWch>1</vShortWch>
+            <v6Lto>0</v6Lto>
+            <v6WtE>0</v6WtE>
             <VariousControls>
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F030x8</Define>
               <Undefine></Undefine>
-              <IncludePath>../Inc;                 ../Drivers/STM32F0xx_HAL_Driver/Inc;                 ../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy;                 ../Drivers/CMSIS/Include;                 ../Drivers/CMSIS/Device/ST/STM32F0xx/Include</IncludePath>
+              <IncludePath>../Inc;                  ../Drivers/STM32F0xx_HAL_Driver/Inc;                  ../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy;                  ../Drivers/CMSIS/Include;                  ../Drivers/CMSIS/Device/ST/STM32F0xx/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -406,11 +408,6 @@
               <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_cortex.c</FilePath>
             </File>
             <File>
-              <FileName>stm32f0xx_hal_rtc_ex.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_rtc_ex.c</FilePath>
-            </File>
-            <File>
               <FileName>stm32f0xx_hal_tim.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_tim.c</FilePath>
@@ -441,11 +438,6 @@
               <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal.c</FilePath>
             </File>
             <File>
-              <FileName>stm32f0xx_hal_rtc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_rtc.c</FilePath>
-            </File>
-            <File>
               <FileName>stm32f0xx_hal_pwr_ex.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pwr_ex.c</FilePath>
@@ -464,6 +456,16 @@
               <FileName>stm32f0xx_hal_dma.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_dma.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f0xx_hal_i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_i2c.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f0xx_hal_i2c_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_i2c_ex.c</FilePath>
             </File>
           </Files>
         </Group>
